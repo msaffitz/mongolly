@@ -1,0 +1,120 @@
+#!/usr/bin/env ruby
+require 'thor'
+require 'yaml'
+require 'time'
+require 'mongo'
+require './lib/mongolly'
+
+module Mongolly
+  class Runner < Thor
+
+    def initialize(*args)
+      super
+      @config = read_config
+      @db_name, @db_config = database_config
+      exit unless valid_config?
+    end
+
+    CONFIG_PATH = File.expand_path '~/.mongolly'
+
+    desc "snapshot", "takes an EBS snapshot of the given volumes"
+    method_option :database, aliases: '-d'
+    def snapshot
+      db = Mongo::Connection.new( @db_config["host"], @db_config["port"] )
+      db['admin'].authenticate( @db_config["user"], @db_config["pass"] )
+
+      SnapshotManager.take_snapshots( db, @config["aws_access_key_id"], @config["aws_secret_asccess_key"], @db_config["volumes"] )
+    end
+
+    desc "clean", "removes snapshots older than the given data"
+    method_option :maximum_age, aliases: '-a', required: true
+    method_option :database, aliases: '-d'
+    def clean
+      max_age = Time.parse(options[:maximum_age])
+
+      puts " ** Cleaning snapshots older than #{max_age}"
+
+      ec2 = AWS::EC2.new(access_key_id: @config["aws_access_key_id"], secret_access_key: @config["aws_secret_asccess_key"])
+      ec2.snapshots.with_owner(:self).each do |snapshot|
+        unless snapshot.tags[:created_at].nil? || snapshot.tags[:backup_key].nil?
+          if Time.parse(snapshot.tags[:created_at]) < max_age
+            puts " ** Deleting #{snapshot.id} created on #{snapshot.tags[:created_at]} with key #{snapshot.tags[:backup_key]}"
+            snapshot.delete
+          end
+        end
+      end
+    end
+
+  private
+    def seed_config
+      return true if File.exists? CONFIG_PATH
+
+      empty_config = {
+        databases: {
+          dbname: {
+            host: nil,
+            port: nil,
+            user: nil,
+            pass: nil,
+            volumes: [nil]
+          }
+        },
+        aws_access_key_id: nil,
+        aws_secret_asccess_key: nil,
+      }
+
+      File.open( CONFIG_PATH, "w" ) do |f|
+        f.write( empty_config.to_yaml )
+      end
+
+      puts " ** An empty configuration file has been written to #{CONFIG_PATH}."
+      puts " ** you must now edit this configuration file with your AWS Credentials,"
+      puts " ** MongoDB Connection Details, and the array of volume IDs that you wish"
+      puts " ** to snapshot"
+
+      return false
+    end
+
+    def read_config
+      return unless seed_config
+      begin
+        return YAML::load( File.read( CONFIG_PATH ) )
+      rescue e
+        puts " ** Unable to read config at #{CONFIG_PATH}"
+        raise e
+      end
+    end
+
+    def database_config
+      if options[:database].to_s.strip.empty? && @config["databases"].size > 1
+        raise ArgumentError.new("Database name not provided and more than database specified in the config file")
+      elsif ! @config["databases"].keys.include? options[:database].to_s.strip
+        raise ArgumentError.new("Database #{options[:database]} not defined in config")
+      end
+
+      db_name = options[:database].to_s.strip.empty? ? @config["databases"].keys.first : options[:database]
+      db_config = @config["databases"][db_name]
+
+      %w(host port user pass region).each do |arg|
+        if db_config[arg].to_s.strip.empty?
+          raise ArgumentError.new( "#{arg} for database #{db_name} cannot be empty" )
+        end
+      end
+      if db_config["volumes"].empty? or db_config["volumes"].map { |v| v.to_s.strip.empty? }.include?(true)
+        raise ArgumentError.new("volumes cannot be empty or include an empty string for database #{db_name}")
+      end
+
+      return db_name, db_config
+    end
+
+    def valid_config?
+      %w(aws_access_key_id aws_secret_asccess_key).each do |arg|
+        raise ArgumentError.new("#{arg} cannot be empty") if @config[arg].to_s.strip.empty?
+      end
+      return true
+    end
+
+  end
+end
+
+Mongolly::Runner.start
