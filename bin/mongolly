@@ -23,7 +23,7 @@ module Mongolly
       db = Mongo::Connection.new( @db_config["host"], @db_config["port"] )
       db['admin'].authenticate( @db_config["user"], @db_config["pass"] )
 
-      SnapshotManager.take_snapshots( db, @config["aws_access_key_id"], @config["aws_secret_asccess_key"], @db_config["volumes"] )
+      SnapshotManager.take_snapshots( db, @config["aws_access_key_id"], @config["aws_secret_access_key"], @db_config["region"], @db_config["volumes"] )
     end
 
     desc "clean", "removes snapshots older than the given data"
@@ -34,7 +34,7 @@ module Mongolly
 
       puts " ** Cleaning snapshots older than #{max_age}"
 
-      ec2 = AWS::EC2.new(access_key_id: @config["aws_access_key_id"], secret_access_key: @config["aws_secret_asccess_key"])
+      ec2 = AWS::EC2.new(access_key_id: @config["aws_access_key_id"], secret_access_key: @config["aws_secret_access_key"]).regions[@db_config["region"]]
       ec2.snapshots.with_owner(:self).each do |snapshot|
         unless snapshot.tags[:created_at].nil? || snapshot.tags[:backup_key].nil?
           if Time.parse(snapshot.tags[:created_at]) < max_age
@@ -56,11 +56,12 @@ module Mongolly
             port: nil,
             user: nil,
             pass: nil,
+            region: nil,
             volumes: [nil]
           }
         },
         aws_access_key_id: nil,
-        aws_secret_asccess_key: nil,
+        aws_secret_access_key: nil,
       }
 
       File.open( CONFIG_PATH, "w" ) do |f|
@@ -108,7 +109,7 @@ module Mongolly
     end
 
     def valid_config?
-      %w(aws_access_key_id aws_secret_asccess_key).each do |arg|
+      %w(aws_access_key_id aws_secret_access_key).each do |arg|
         raise ArgumentError.new("#{arg} cannot be empty") if @config[arg].to_s.strip.empty?
       end
       return true

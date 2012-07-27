@@ -3,14 +3,23 @@ require 'aws-sdk'
 module Mongolly
   class SnapshotManager
 
-    def self.take_snapshots(db, aws_key_id, aws_secret_key, volume_ids)
+    def self.take_snapshots(db, aws_key_id, aws_secret_key, region, volume_ids)
+      profile_levels = {}
+
       unless db.locked?
         puts " ** Locking Database"
+        db.database_names.each do |db_name|
+          level = db[db_name].profiling_level
+          if level != :off
+            profile_levels[db_name] = level
+            db[db_name].profiling_level = :off
+          end
+        end
         db.lock!
       end
 
       begin
-        ec2 = AWS::EC2.new(access_key_id: aws_key_id, secret_access_key: aws_secret_key)
+        ec2 = AWS::EC2.new(access_key_id: aws_key_id, secret_access_key: aws_secret_key).regions[region]
         backup_key = (0...8).map{65.+(rand(25)).chr}.join
 
         puts " ** Starting Snapshot with key #{backup_key}"
@@ -28,6 +37,13 @@ module Mongolly
         if db.locked?
           puts " ** Unlocking Database"
           db.unlock!
+          db.database_names.each do |db_name|
+            level = profile_levels[db_name]
+            unless level.nil? || level == :off
+              puts " ** Setting #{db_name} profile level to #{level.to_s}"
+              db[db_name].profiling_level = level
+            end
+          end
         end
       end
     end
