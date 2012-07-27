@@ -3,7 +3,7 @@ require 'thor'
 require 'yaml'
 require 'time'
 require 'mongo'
-require './lib/mongolly'
+require 'mongolly'
 
 module Mongolly
   class Runner < Thor
