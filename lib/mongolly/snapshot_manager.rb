@@ -9,10 +9,14 @@ module Mongolly
       unless db.locked?
         puts " ** Locking Database"
         db.database_names.each do |db_name|
-          level = db[db_name].profiling_level
-          if level != :off
-            profile_levels[db_name] = level
-            db[db_name].profiling_level = :off
+          begin
+            level = db[db_name].profiling_level
+            if level != :off
+              profile_levels[db_name] = level
+              db[db_name].profiling_level = :off
+            end
+          rescue Mongo::InvalidNSName
+            puts " ** Skiping #{db_name} with invalid database name"
           end
         end
         db.lock!
@@ -38,10 +42,14 @@ module Mongolly
           puts " ** Unlocking Database"
           db.unlock!
           db.database_names.each do |db_name|
-            level = profile_levels[db_name]
-            unless level.nil? || level == :off
-              puts " ** Setting #{db_name} profile level to #{level.to_s}"
-              db[db_name].profiling_level = level
+            begin
+               level = profile_levels[db_name]
+              unless level.nil? || level == :off
+                puts " ** Setting #{db_name} profile level to #{level.to_s}"
+                db[db_name].profiling_level = level
+              end
+            rescue Mongo::InvalidNSName
+              puts " ** Skiping #{db_name} with invalid database name"
             end
           end
         end
