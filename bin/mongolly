@@ -2,47 +2,31 @@
 require 'thor'
 require 'yaml'
 require 'time'
-require 'mongo'
 require 'mongolly'
 
 module Mongolly
   class Runner < Thor
 
+    CONFIG_PATH = File.expand_path '~/.mongolly'
+
     def initialize(*args)
       super
       @config = read_config
-      @db_name, @db_config = database_config
-      exit unless valid_config?
+      exit unless @config && valid_config?
     end
 
-    CONFIG_PATH = File.expand_path '~/.mongolly'
-
-    desc "snapshot", "takes an EBS snapshot of the given volumes"
-    method_option :database, aliases: '-d'
-    def snapshot
-      db = Mongo::Connection.new( @db_config["host"], @db_config["port"] )
-      db['admin'].authenticate( @db_config["user"], @db_config["pass"] )
-
-      SnapshotManager.take_snapshots( db, @config["aws_access_key_id"], @config["aws_secret_access_key"], @db_config["region"], @db_config["volumes"] )
+    desc "backup", "Snapshots the Database EBS Volumes"
+    def backup
+      puts " ** Backing up ..."
+      Shepherd.new(@config).backup
     end
 
-    desc "clean", "removes snapshots older than the given data"
-    method_option :maximum_age, aliases: '-a', required: true
-    method_option :database, aliases: '-d'
+    desc "clean", "Removes old Database EBS Snapshots"
+    method_option :age, aliases: '-a', required: true
     def clean
-      max_age = Time.parse(options[:maximum_age])
-
-      puts " ** Cleaning snapshots older than #{max_age}"
-
-      ec2 = AWS::EC2.new(access_key_id: @config["aws_access_key_id"], secret_access_key: @config["aws_secret_access_key"]).regions[@db_config["region"]]
-      ec2.snapshots.with_owner(:self).each do |snapshot|
-        unless snapshot.tags[:created_at].nil? || snapshot.tags[:backup_key].nil?
-          if Time.parse(snapshot.tags[:created_at]) < max_age
-            puts " ** Deleting #{snapshot.id} created on #{snapshot.tags[:created_at]} with key #{snapshot.tags[:backup_key]}"
-            snapshot.delete
-          end
-        end
-      end
+      age = Time.parse(options[:age])
+      puts " ** Cleaning snapshots older than #{age}"
+      Shepherd.new(@config).cleanup(age)
     end
 
   private
@@ -50,18 +34,12 @@ module Mongolly
       return true if File.exists? CONFIG_PATH
 
       empty_config = {
-        databases: {
-          dbname: {
-            host: nil,
-            port: nil,
-            user: nil,
-            pass: nil,
-            region: nil,
-            volumes: [nil]
-          }
-        },
-        aws_access_key_id: nil,
-        aws_secret_access_key: nil,
+        database: [],
+        db_username: nil,
+        db_password: nil,
+        access_key_id: nil,
+        secret_access_key: nil,
+        aws_region: 'us-east-1'
       }
 
       File.open( CONFIG_PATH, "w" ) do |f|
@@ -77,7 +55,7 @@ module Mongolly
     end
 
     def read_config
-      return unless seed_config
+      return false unless seed_config
       begin
         return YAML::load( File.read( CONFIG_PATH ) )
       rescue e
@@ -86,31 +64,9 @@ module Mongolly
       end
     end
 
-    def database_config
-      if options[:database].to_s.strip.empty? && @config["databases"].size > 1
-        raise ArgumentError.new("Database name not provided and more than database specified in the config file")
-      elsif ! @config["databases"].keys.include? options[:database].to_s.strip
-        raise ArgumentError.new("Database #{options[:database]} not defined in config")
-      end
-
-      db_name = options[:database].to_s.strip.empty? ? @config["databases"].keys.first : options[:database]
-      db_config = @config["databases"][db_name]
-
-      %w(host port user pass region).each do |arg|
-        if db_config[arg].to_s.strip.empty?
-          raise ArgumentError.new( "#{arg} for database #{db_name} cannot be empty" )
-        end
-      end
-      if db_config["volumes"].empty? or db_config["volumes"].map { |v| v.to_s.strip.empty? }.include?(true)
-        raise ArgumentError.new("volumes cannot be empty or include an empty string for database #{db_name}")
-      end
-
-      return db_name, db_config
-    end
-
     def valid_config?
-      %w(aws_access_key_id aws_secret_access_key).each do |arg|
-        raise ArgumentError.new("#{arg} cannot be empty") if @config[arg].to_s.strip.empty?
+      %w(database db_username db_password access_key_id secret_access_key).each do |arg|
+        raise ArgumentError.new("#{arg} cannot be empty") if @config[arg.to_sym].to_s.strip.empty?
       end
       return true
     end

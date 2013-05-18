@@ -21,6 +21,6 @@ Gem::Specification.new do |gem|
   gem.add_dependency("mongo", ["~> 1.8.3"])
   gem.add_dependency("bson_ext", ["~> 1.8.3"])
   gem.add_dependency("aws-sdk", ["~> 1.5.8"])
-  gem.add_dependency("debugger")
+  gem.add_dependency("ipaddress")
 
 end
