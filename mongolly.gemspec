@@ -20,7 +20,7 @@ Gem::Specification.new do |gem|
   gem.add_dependency("thor", ["~> 0.15.4"])
   gem.add_dependency("mongo", ["~> 1.8.3"])
   gem.add_dependency("bson_ext", ["~> 1.8.3"])
-  gem.add_dependency("aws-sdk", ["~> 1.5.8"])
+  gem.add_dependency("aws-sdk", ["~> 1.9.5"])
   gem.add_dependency("ipaddress")
 
 end
