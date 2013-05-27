@@ -17,7 +17,6 @@ module Mongolly
 
     desc "backup", "Snapshots the Database EBS Volumes"
     def backup
-      puts " ** Backing up ..."
       Shepherd.new(@config).backup
     end
 
@@ -25,7 +24,6 @@ module Mongolly
     method_option :age, aliases: '-a', required: true
     def clean
       age = Time.parse(options[:age])
-      puts " ** Cleaning snapshots older than #{age}"
       Shepherd.new(@config).cleanup(age)
     end
 
@@ -39,7 +37,7 @@ module Mongolly
         db_password: nil,
         access_key_id: nil,
         secret_access_key: nil,
-        aws_region: 'us-east-1'
+        aws_region: 'us-east-1',
       }
 
       File.open( CONFIG_PATH, "w" ) do |f|
