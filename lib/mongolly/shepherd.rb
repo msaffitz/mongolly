@@ -2,12 +2,14 @@ module Mongolly
   class Shepherd
 
     def initialize(options={})
+      @options           = options
       @access_key_id     = options[:access_key_id]
       @secret_access_key = options[:secret_access_key]
-      @region            = options[:aws_region] || 'us-east-1'
+      @region            = options[:region] || 'us-east-1'
       @database          = options[:database]
       @db_username       = options[:db_username]
       @db_password       = options[:db_password]
+      @dry_run           = options[:dry_run]
       @logger            = options[:logger] || Logger.new(STDOUT)
       @logger.level = case options[:log_level].strip
                         when 'fatal'; then Logger::FATAL
@@ -20,10 +22,7 @@ module Mongolly
 
     def backup
       @logger.info "Starting backup..."
-      connection.snapshot_ebs(access_key_id: @access_key_id,
-                              secret_access_key: @secret_access_key,
-                              region: @region,
-                              logger: @logger)
+      connection.snapshot_ebs({logger: @logger}.merge(@options))
       @logger.info "Backup complete."
     end
 
@@ -40,7 +39,7 @@ module Mongolly
         unless snapshot.tags[:created_at].nil? || snapshot.tags[:backup_key].nil?
           if Time.parse(snapshot.tags[:created_at]) < age
             @logger.debug "deleting snapshot #{snapshot.id} tagged #{snapshot.tags[:backup_key]} created at #{snapshot.tags[:created_at]}, earlier than #{age}"
-            snapshot.delete
+            snapshot.delete  unless @dry_run
           end
         end
       end

@@ -22,5 +22,7 @@ Gem::Specification.new do |gem|
   gem.add_dependency("bson_ext", ["~> 1.8.3"])
   gem.add_dependency("aws-sdk", ["~> 1.9.5"])
   gem.add_dependency("ipaddress")
+  gem.add_dependency("net-ssh", ["~> 2.0"])
+  gem.add_dependency("retries")
 
 end

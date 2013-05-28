@@ -16,15 +16,17 @@ module Mongolly
     end
 
     desc "backup", "Snapshots the Database EBS Volumes"
+    method_option :dry_run, type: :boolean, desc: 'Step through command without changes'
     def backup
-      Shepherd.new(@config).backup
+      Shepherd.new({dry_run: options[:dry_run]}.merge(@config)).backup
     end
 
     desc "clean", "Removes old Database EBS Snapshots"
     method_option :age, aliases: '-a', required: true
+    method_option :dry_run, type: :boolean, desc: 'Step through command without changes'
     def clean
       age = Time.parse(options[:age])
-      Shepherd.new(@config).cleanup(age)
+      Shepherd.new({dry_run: options[:dry_run]}.merge(@config)).cleanup(age)
     end
 
   private
@@ -37,7 +39,11 @@ module Mongolly
         db_password: nil,
         access_key_id: nil,
         secret_access_key: nil,
-        aws_region: 'us-east-1',
+        region: 'us-east-1',
+        log_level: 'info',
+        mongo_start_command: nil,
+        mongo_stop_command: nil,
+        config_server_ssh_user: nil
       }
 
       File.open( CONFIG_PATH, "w" ) do |f|

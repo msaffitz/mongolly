@@ -14,7 +14,7 @@ class AWS::EC2::InstanceCollection
 
       return instances.first
     rescue SocketError
-      raise RuntimeError.new("Unable to determine IP address from #{address}")
+      raise RuntimeError.new("Unable to determine IP address from #{address}:#{port}")
     end
 
 private
