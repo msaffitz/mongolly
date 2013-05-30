@@ -43,7 +43,8 @@ module Mongolly
         log_level: 'info',
         mongo_start_command: nil,
         mongo_stop_command: nil,
-        config_server_ssh_user: nil
+        config_server_ssh_user: nil,
+        config_server_ssh_keypath: nil
       }
 
       File.open( CONFIG_PATH, "w" ) do |f|

@@ -20,7 +20,8 @@ class Mongo::MongoClient
     if mongos?
       @mongolly_logger.info("Detected sharded cluster")
       with_disabled_balancing do
-        stop_config_server(options[:config_server_ssh_user], options[:mongo_stop_command])
+        # Stop Config Server
+        ssh_command(options[:config_server_ssh_user], config_server, options[:mongo_stop_command], options[:config_server_ssh_keypath])
 
         backup_instance(config_server, options, false)
 
@@ -28,7 +29,8 @@ class Mongo::MongoClient
           @mongolly_logger.debug("Found Shard #{name} with hosts #{hosts}.")
           replica_set_connection(hosts, options).snapshot_ebs(options)
         end
-        start_config_server(options[:config_server_ssh_user], options[:mongo_start_command])
+        # Start Config Server
+        ssh_command(options[:config_server_ssh_user], config_server, options[:mongo_start_command], options[:config_server_ssh_keypath])
       end
     else
       backup_instance(snapshot_ebs_target, options, true )
@@ -87,64 +89,6 @@ protected
 
   def balancer_active?
     self['config'].collection('locks').find({_id: 'balancer'}).count > 1
-  end
-
-  def stop_config_server(user, stop_command)
-    raise RuntimeError.new "mongo ssh user not specified"  unless user.to_s.strip != ''
-    raise RuntimeError.new "mongo ssh user not specified"  unless stop_command.to_s.strip != ''
-    @mongolly_logger.debug "Stopping config server #{config_server}"
-    unless @mongolly_dry_run
-      exit_code = nil
-      output = ''
-      Net::SSH.start(config_server, user.strip) do |ssh|
-        channel = ssh.open_channel do |ch|
-          ch.request_pty
-          ch.exec(stop_command.strip) do |ch, success|
-            raise "Unable to stop config server on #{config_server}"  unless success
-          end
-        end
-        channel.on_request("exit-status") do |ch,data|
-          exit_code = data.read_long
-        end
-        channel.on_extended_data do |ch,type,data|
-          output += data
-        end
-        ssh.loop
-      end
-
-      if exit_code != 0
-        raise RuntimeError.new "Unable to stop config server, #{output}"
-      end
-    end
-  end
-
-  def start_config_server(user, start_command )
-    raise RuntimeError.new "mongo ssh user not specified"  unless user.to_s.strip != ''
-    raise RuntimeError.new "mongo ssh user not specified"  unless start_command.to_s.strip != ''
-    @mongolly_logger.debug "Starting config server #{config_server}"
-    unless @mongolly_dry_run
-      exit_code = nil
-      output = ''
-      Net::SSH.start(config_server, user.strip) do |ssh|
-        channel = ssh.open_channel do |ch|
-          ch.request_pty
-          ch.exec(start_command.strip) do |ch, success|
-            raise "Unable to start config server on #{config_server}"  unless success
-          end
-        end
-        channel.on_request("exit-status") do |ch,data|
-          exit_code = data.read_long
-        end
-        channel.on_extended_data do |ch,type,data|
-          output += data
-        end
-        ssh.loop
-      end
-
-      if exit_code != 0
-        raise RuntimeError.new "Unable to start config server, #{output}"
-      end
-    end
   end
 
   def config_server
@@ -238,5 +182,32 @@ protected
     db['admin'].authenticate(options[:db_username], options[:db_password], true)
     return db
   end
+
+  def ssh_command(user, host, command, keypath = nil)
+    @mongolly_logger.debug("Running #{command} on #{host} as #{user}")
+    return if @mongolly_dry_run
+    exit_code = nil
+    output = ''
+    Net::SSH.start(host, user.strip, keys: keypath) do |ssh|
+      channel = ssh.open_channel do |ch|
+        ch.request_pty
+        ch.exec(command.strip) do |ch, success|
+          raise "Unable to exec #{command.strip} on #{host}"  unless success
+        end
+      end
+      channel.on_request("exit-status") do |ch,data|
+        exit_code = data.read_long
+      end
+      channel.on_extended_data do |ch,type,data|
+        output += data
+      end
+      ssh.loop
+    end
+
+    if exit_code != 0
+      raise RuntimeError.new "Unable to exec #{command} on #{host}, #{output}"
+    end
+  end
+
 
 end
