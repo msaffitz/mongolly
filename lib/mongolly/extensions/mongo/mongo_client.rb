@@ -33,7 +33,7 @@ class Mongo::MongoClient
         ssh_command(options[:config_server_ssh_user], config_server, options[:mongo_start_command], options[:config_server_ssh_keypath])
       end
     else
-      backup_instance(snapshot_ebs_target, options, true )
+      backup_instance(snapshot_ebs_target, options, false )
     end
   end
 
@@ -53,6 +53,9 @@ protected
     @mongolly_logger.debug("Found target volumes #{volumes.map(&:id).join(', ')} ")
 
     raise RuntimeError.new "no suitable volumes found"  unless volumes.length > 0
+
+    # Force lock with multiple volumes
+    lock = true  if volumes.length > 1
 
     backup_block = proc do
       volumes.each do |volume|
