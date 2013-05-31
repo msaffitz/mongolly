@@ -9,4 +9,8 @@ class BSON::Timestamp
     increment <=> other.increment
   end
 
+  def -(other)
+    seconds - other.seconds
+  end
+
 end
