@@ -6,7 +6,7 @@ require 'retries'
 require 'debugger'
 
 class Mongo::MongoClient
-  MAX_DISABLE_BALANCER_WAIT = 60*5 # 5 Minutes
+  MAX_DISABLE_BALANCER_WAIT = 60*8 # 8 Minutes
   REPLICA_SNAPSHOT_THRESHOLD = 60*5 # 5 Minutes
 
   def snapshot_ebs(options={})
@@ -92,7 +92,7 @@ protected
   end
 
   def balancer_active?
-    self['config'].collection('locks').find({_id: 'balancer'}).count > 1
+    self['config'].collection('locks').find({_id: 'balancer', state: {'$ne' => 0}}).count > 0
   end
 
   def config_server
@@ -112,7 +112,7 @@ protected
         sleep 10
       end
       if !@mongolly_dry_run && balancer_active?
-        raise RuntimeError.new "unable to disable balancer within #{MAX_DISABLE_BALANCER_WAIT}s"
+        raise RuntimeError.new "Unable to disable balancer within #{MAX_DISABLE_BALANCER_WAIT}s"
       end
       @mongolly_logger.debug "With shard balancing disabled..."
       yield
