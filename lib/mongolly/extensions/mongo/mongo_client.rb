@@ -3,8 +3,6 @@ require 'logger'
 require 'net/ssh'
 require 'retries'
 
-require 'debugger'
-
 class Mongo::MongoClient
   MAX_DISABLE_BALANCER_WAIT = 60*8 # 8 Minutes
   REPLICA_SNAPSHOT_THRESHOLD = 60*5 # 5 Minutes
