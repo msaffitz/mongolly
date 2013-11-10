@@ -6,6 +6,7 @@ require 'retries'
 class Mongo::MongoClient
   MAX_DISABLE_BALANCER_WAIT = 60*8 # 8 Minutes
   REPLICA_SNAPSHOT_THRESHOLD = 60*5 # 5 Minutes
+  REPLICA_SNAPSHOT_PREFER_HIDDEN = true
 
   def snapshot_ebs(options={})
 
@@ -32,12 +33,12 @@ class Mongo::MongoClient
         ssh_command(options[:config_server_ssh_user], config_server, options[:mongo_start_command], options[:config_server_ssh_keypath])
       end
     else
-      backup_instance(snapshot_ebs_target(REPLICA_SNAPSHOT_THRESHOLD), options, false )
+      backup_instance(snapshot_ebs_target(REPLICA_SNAPSHOT_THRESHOLD, REPLICA_SNAPSHOT_PREFER_HIDDEN), options, false )
     end
   end
 
 protected
-  def snapshot_ebs_target(threshold=nil)
+  def snapshot_ebs_target(threshold=nil, prefer_hidden=nil)
     host_port.join(':')
   end
 
