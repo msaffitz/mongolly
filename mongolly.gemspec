@@ -17,12 +17,12 @@ Gem::Specification.new do |gem|
   gem.test_files    = gem.files.grep(%r{^(test|spec|features)/})
   gem.require_paths = ["lib"]
 
-  gem.add_dependency("thor", ["~> 0.15.4"])
-  gem.add_dependency("mongo", ["~> 1.8.3"])
-  gem.add_dependency("bson_ext", ["~> 1.8.3"])
-  gem.add_dependency("aws-sdk", ["~> 1.9.5"])
+  gem.add_dependency("thor")
+  gem.add_dependency("mongo")
+  gem.add_dependency("bson_ext")
+  gem.add_dependency("aws-sdk")
   gem.add_dependency("ipaddress")
-  gem.add_dependency("net-ssh", ["~> 2.0"])
+  gem.add_dependency("net-ssh")
   gem.add_dependency("retries")
 
 end
