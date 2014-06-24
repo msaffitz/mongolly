@@ -96,7 +96,7 @@ protected
 
   def config_server
     unless @config_server
-      @config_server = self['admin'].command( { getCmdLineOpts: 1 } )["parsed"]["configdb"].split(",").sort.first.split(":").first
+      @config_server = self['admin'].command( { getCmdLineOpts: 1 } )["parsed"]["sharding"]["configDB"].split(",").sort.first.split(":").first
       @mongolly_logger.debug "Found config server #{@config_server}"
     end
     return @config_server
