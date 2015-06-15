@@ -20,7 +20,7 @@ Gem::Specification.new do |gem|
   gem.add_dependency("thor")
   gem.add_dependency("mongo")
   gem.add_dependency("bson_ext")
-  gem.add_dependency("aws-sdk")
+  gem.add_dependency("aws-sdk", "~>1")
   gem.add_dependency("ipaddress")
   gem.add_dependency("net-ssh")
   gem.add_dependency("retries")
