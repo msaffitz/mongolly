@@ -182,7 +182,7 @@ protected
 
   def replica_set_connection(hosts, options)
     db = Mongo::MongoReplicaSetClient.new(hosts)
-    db['admin'].authenticate(options[:db_username], options[:db_password], true)
+    db['admin'].authenticate(options[:db_username], options[:db_password])
     return db
   end
 
