@@ -9,7 +9,6 @@ class Mongo::MongoClient
   REPLICA_SNAPSHOT_PREFER_HIDDEN = true
 
   def snapshot_ebs(options={})
-
     @mongolly_dry_run = options[:dry_run] || false
     @mongolly_logger = options[:logger] || Logger.new(STDOUT)
     options[:volume_tag] ||= 'mongolly'
@@ -20,17 +19,14 @@ class Mongo::MongoClient
     if mongos?
       @mongolly_logger.info("Detected sharded cluster")
       with_disabled_balancing do
-        # Stop Config Server
-        ssh_command(options[:config_server_ssh_user], config_server, options[:mongo_stop_command], options[:config_server_ssh_keypath])
+        with_config_server_stopped(options) do
+          backup_instance(config_server, options, false)
 
-        backup_instance(config_server, options, false)
-
-        shards.each do |name,hosts|
-          @mongolly_logger.debug("Found Shard #{name} with hosts #{hosts}.")
-          replica_set_connection(hosts, options).snapshot_ebs(options)
+          shards.each do |name,hosts|
+            @mongolly_logger.debug("Found Shard #{name} with hosts #{hosts}.")
+            replica_set_connection(hosts, options).snapshot_ebs(options)
+          end
         end
-        # Start Config Server
-        ssh_command(options[:config_server_ssh_user], config_server, options[:mongo_start_command], options[:config_server_ssh_keypath])
       end
     else
       backup_instance(snapshot_ebs_target(REPLICA_SNAPSHOT_THRESHOLD, REPLICA_SNAPSHOT_PREFER_HIDDEN), options, false )
@@ -102,6 +98,19 @@ protected
     return @config_server
   end
 
+  def with_config_server_stopped(options={})
+    begin
+      # Stop Config Server
+      ssh_command(options[:config_server_ssh_user], config_server, options[:mongo_stop_command], options[:config_server_ssh_keypath])
+      yield
+    rescue => ex
+      @mongolly_logger.error "Error with config server stopped: #{ex.to_s}"
+    ensure
+      # Start Config Server
+      ssh_command(options[:config_server_ssh_user], config_server, options[:mongo_start_command], options[:config_server_ssh_keypath])
+    end
+  end
+
   def with_disabled_balancing
     begin
       disable_balancing
@@ -115,6 +124,8 @@ protected
       end
       @mongolly_logger.debug "With shard balancing disabled..."
       yield
+    rescue => ex
+      @mongolly_logger.error "Error with disabled balancer: #{ex.to_s}"
     ensure
       enable_balancing
     end
@@ -127,6 +138,8 @@ protected
       lock!  unless @mongolly_dry_run || locked?
       @mongolly_logger.debug "With database locked..."
       yield
+    rescue => ex
+      @mongolly_logger.error "Error with database locked: #{ex.to_s}"
     ensure
       @mongolly_logger.debug "Unlocking database..."
       unlock!  if !@mongolly_dry_run && locked?
