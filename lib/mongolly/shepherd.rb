@@ -54,7 +54,7 @@ module Mongolly
         @logger.debug "connecting to a single instance #{@database}"
         Mongo::MongoClient.new(*@database.split(':'))
       end
-      db['admin'].authenticate(@db_username, @db_password)
+      db['admin'].authenticate(@db_username, @db_password) if @db_username && @db_password
       return db
     end
   end
