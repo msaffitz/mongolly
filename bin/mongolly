@@ -70,7 +70,7 @@ module Mongolly
     end
 
     def valid_config?
-      %w(database db_username db_password access_key_id secret_access_key).each do |arg|
+      %w(database access_key_id secret_access_key).each do |arg|
         raise ArgumentError.new("#{arg} cannot be empty") if @config[arg.to_sym].to_s.strip.empty?
       end
       return true
