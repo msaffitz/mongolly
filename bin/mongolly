@@ -6,19 +6,12 @@ require 'mongolly'
 
 module Mongolly
   class Runner < Thor
-
-    CONFIG_PATH = File.expand_path '~/.mongolly'
-
-    def initialize(*args)
-      super
-      @config = read_config
-      exit unless @config && valid_config?
-    end
+    class_option :config, :type => :string, aliases: '-c', default: '~/.mongolly', desc: 'Path to config file'
 
     desc "backup", "Snapshots the Database EBS Volumes"
     method_option :dry_run, type: :boolean, desc: 'Step through command without changes'
     def backup
-      Shepherd.new({dry_run: options[:dry_run]}.merge(@config)).backup
+      Shepherd.new({dry_run: options[:dry_run]}.merge(config)).backup
     end
 
     desc "clean", "Removes old Database EBS Snapshots"
@@ -26,13 +19,31 @@ module Mongolly
     method_option :dry_run, type: :boolean, desc: 'Step through command without changes'
     def clean
       age = Time.parse(options[:age])
-      Shepherd.new({dry_run: options[:dry_run]}.merge(@config)).cleanup(age)
+      Shepherd.new({dry_run: options[:dry_run]}.merge(config)).cleanup(age)
     end
 
   private
-    def seed_config
-      return true if File.exists? CONFIG_PATH
+    def config
+      @config ||= read_config
+    end
 
+    def read_config
+      unless File.exists? config_path
+        seed_config
+        exit 1
+      end
+
+      begin
+        cfg = YAML::load( File.read( config_path ) )
+      rescue e
+        puts " ** Unable to read config at #{config_path}"
+        raise e
+      end
+
+      validated_config cfg
+    end
+
+    def seed_config
       empty_config = {
         database: [],
         db_username: nil,
@@ -47,35 +58,26 @@ module Mongolly
         config_server_ssh_keypath: nil
       }
 
-      File.open( CONFIG_PATH, "w" ) do |f|
+      File.open( config_path, "w" ) do |f|
         f.write( empty_config.to_yaml )
       end
 
-      puts " ** An empty configuration file has been written to #{CONFIG_PATH}."
+      puts " ** An empty configuration file has been written to #{config_path}."
       puts " ** you must now edit this configuration file with your AWS Credentials,"
       puts " ** MongoDB Connection Details, and the array of volume IDs that you wish"
       puts " ** to snapshot"
-
-      return false
     end
 
-    def read_config
-      return false unless seed_config
-      begin
-        return YAML::load( File.read( CONFIG_PATH ) )
-      rescue e
-        puts " ** Unable to read config at #{CONFIG_PATH}"
-        raise e
-      end
-    end
-
-    def valid_config?
+    def validated_config(cfg)
       %w(database access_key_id secret_access_key).each do |arg|
-        raise ArgumentError.new("#{arg} cannot be empty") if @config[arg.to_sym].to_s.strip.empty?
+        raise ArgumentError.new("#{arg} cannot be empty") if cfg[arg.to_sym].to_s.strip.empty?
       end
-      return true
+      cfg
     end
 
+    def config_path
+      config_path ||= File.expand_path(options[:config])
+    end
   end
 end
 
