@@ -40,7 +40,7 @@ module Mongolly
         raise e
       end
 
-      valid_config?(cfg)
+      validated_config cfg
     end
 
     def seed_config
