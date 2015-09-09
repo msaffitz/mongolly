@@ -60,6 +60,7 @@ protected
           snapshot = volume.create_snapshot("#{options[:backup_key]} #{Time.now} mongolly #{host}")
           snapshot.add_tag('created_at', value: Time.now)
           snapshot.add_tag('backup_key', value: options[:backup_key])
+          snapshot.add_tag(options[:custom_tag_key], value: options[:custom_tag_value] || 1) if options[:custom_tag_key]
         end
       end
     end
