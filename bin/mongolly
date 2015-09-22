@@ -55,7 +55,8 @@ module Mongolly
         mongo_start_command: nil,
         mongo_stop_command: nil,
         config_server_ssh_user: nil,
-        config_server_ssh_keypath: nil
+        config_server_ssh_keypath: nil,
+        balancer_wait: nil
       }
 
       File.open( config_path, "w" ) do |f|

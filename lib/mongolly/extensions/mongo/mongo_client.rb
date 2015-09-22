@@ -4,7 +4,7 @@ require 'net/ssh'
 require 'retries'
 
 class Mongo::MongoClient
-  MAX_DISABLE_BALANCER_WAIT = 60*8 # 8 Minutes
+  DEFAULT_BALANCER_WAIT = 60*8 # 8 Minutes
   REPLICA_SNAPSHOT_THRESHOLD = 60*5 # 5 Minutes
   REPLICA_SNAPSHOT_PREFER_HIDDEN = true
 
@@ -13,6 +13,8 @@ class Mongo::MongoClient
     @mongolly_logger = options[:logger] || Logger.new(STDOUT)
     options[:volume_tag] ||= 'mongolly'
     options[:backup_key] ||= (0...8).map{65.+(rand(25)).chr}.join
+
+    @balancer_wait = (options[:balancer_wait] || DEFAULT_BALANCER_WAIT).to_i
 
     @ec2 = AWS::EC2.new(access_key_id: options[:access_key_id], secret_access_key: options[:secret_access_key], region: options[:region])
 
@@ -114,13 +116,13 @@ protected
   def with_disabled_balancing
     begin
       disable_balancing
-      term_time = Time.now + MAX_DISABLE_BALANCER_WAIT
+      term_time = Time.now + @balancer_wait
       while !@mongolly_dry_run && (Time.now < term_time) && balancer_active?
         @mongolly_logger.info "Balancer active, sleeping for 10s (#{(term_time - Time.now).round}s remaining)"
         sleep 10
       end
       if !@mongolly_dry_run && balancer_active?
-        raise RuntimeError.new "Unable to disable balancer within #{MAX_DISABLE_BALANCER_WAIT}s"
+        raise RuntimeError.new "Unable to disable balancer within #{@balancer_wait}s"
       end
       @mongolly_logger.debug "With shard balancing disabled..."
       yield
