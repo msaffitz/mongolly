@@ -18,7 +18,7 @@ Gem::Specification.new do |gem|
   gem.require_paths = ["lib"]
 
   gem.add_dependency("thor")
-  gem.add_dependency("mongo")
+  gem.add_dependency("mongo", "~>1")
   gem.add_dependency("bson_ext")
   gem.add_dependency("aws-sdk", "~>1")
   gem.add_dependency("ipaddress")
