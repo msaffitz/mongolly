@@ -1,4 +1,4 @@
-require 'mongo'
+require "mongo"
 
 class BSON::Timestamp
   include Comparable
