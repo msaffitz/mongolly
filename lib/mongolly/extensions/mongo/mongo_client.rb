@@ -7,6 +7,7 @@ class Mongo::MongoClient
   MAX_DISABLE_BALANCER_WAIT = 60 * 8 # 8 Minutes
   REPLICA_SNAPSHOT_THRESHOLD = 60 * 5 # 5 Minutes
   REPLICA_SNAPSHOT_PREFER_HIDDEN = true
+  DEFAULT_MONGO_PORT = 27017 # rubocop: disable Style/NumericLiterals
 
   def snapshot_ebs(options = {})
     @mongolly_dry_run = options[:dry_run] || false
@@ -20,7 +21,7 @@ class Mongo::MongoClient
       @mongolly_logger.info("Detected sharded cluster")
       with_disabled_balancing do
         with_config_server_stopped(options) do
-          backup_instance(config_server, options, false)
+          backup_instance(config_server, options)
 
           shards.each do |name, hosts|
             @mongolly_logger.debug("Found Shard #{name} with hosts #{hosts}.")
@@ -29,7 +30,7 @@ class Mongo::MongoClient
         end
       end
     else
-      backup_instance(snapshot_ebs_target(REPLICA_SNAPSHOT_THRESHOLD, REPLICA_SNAPSHOT_PREFER_HIDDEN), options, false)
+      backup_instance(snapshot_ebs_target(REPLICA_SNAPSHOT_THRESHOLD, REPLICA_SNAPSHOT_PREFER_HIDDEN), options.merge(strict_connection: true))
     end
   end
 
@@ -39,38 +40,6 @@ class Mongo::MongoClient
     host_port.join(":")
   end
 
-  def backup_instance(address, options, lock = true)
-    host, port = address.split(":")
-    instance = @ec2.instances.find_from_address(host, port)
-
-    @mongolly_logger.info("Backing up instance #{instance.id} from #{host}:#{port}")
-
-    volumes = instance.volumes_with_tag(options[:volume_tag])
-
-    @mongolly_logger.debug("Found target volumes #{volumes.map(&:id).join(', ')} ")
-
-    raise "no suitable volumes found" if volumes.empty?
-
-    # Force lock with multiple volumes
-    lock = true  if volumes.length > 1
-
-    backup_block = proc do
-      volumes.each do |volume|
-        @mongolly_logger.debug("Snapshotting #{volume.id} with tag #{options[:backup_key]}")
-        next if @mongolly_dry_run
-        snapshot = volume.create_snapshot("#{options[:backup_key]} #{Time.now.utc} mongolly #{host}")
-        snapshot.add_tag("created_at", value: Time.now.utc)
-        snapshot.add_tag("backup_key", value: options[:backup_key])
-      end
-    end
-
-    if lock
-      with_database_locked(&backup_block)
-    else
-      backup_block.call
-    end
-  end
-
   def disable_balancing
     @mongolly_logger.debug "Disabling Shard Balancing"
     self["config"].collection("settings").update({ _id: "balancer" }, { "$set" => { stopped: true } }, upsert: true) unless @mongolly_dry_run
@@ -78,7 +47,7 @@ class Mongo::MongoClient
 
   def enable_balancing
     @mongolly_logger.debug "Enabling Shard Balancing"
-    retry_logger = Proc do |_, attempt_number, total_delay|
+    retry_logger = proc do |_, attempt_number, total_delay|
       @mongolly_logger.debug "Error enabling balancing (config server not up?); retry attempt #{attempt_number}; #{total_delay} seconds have passed."
     end
     with_retries(max_tries: 5, handler: retry_logger, rescue: Mongo::OperationFailure, base_sleep_seconds: 5, max_sleep_seconds: 120) do
@@ -172,7 +141,7 @@ class Mongo::MongoClient
     @profiled_dbs.each do |db, level|
       begin
         @mongolly_logger.debug("Enabling profiling for #{db}, level #{level}")
-        self[db].profiling_level = level  unless @mongolly_dry_run
+        self[db].profiling_level = level unless @mongolly_dry_run
       rescue Mongo::InvalidNSName
         @mongolly_logger.debug("Skipping database #{db} due to invalid name")
       end
@@ -219,4 +188,45 @@ class Mongo::MongoClient
       raise "Unable to exec #{command} on #{host}, #{output}"
     end
   end
+
+  private
+
+  def backup_instance(address, options)
+    host, port = address.split(":")
+    port ||= DEFAULT_MONGO_PORT
+
+    # Ensure we're directly connected to the target node for backup
+    # This prevents a subclassed replica set from still acting against the
+    # primary
+    if options[:strict_connection] && (self.host != host || self.port.to_i != port.to_i)
+      return Mongo::MongoClient.new(host, port.to_i, slave_ok: true).snapshot_ebs(options)
+    end
+
+    instance = @ec2.instances.find_from_address(host, port)
+
+    @mongolly_logger.info("Backing up instance #{instance.id} from #{host}:#{port}")
+
+    volumes = instance.volumes_with_tag(options[:volume_tag])
+
+    @mongolly_logger.debug("Found target volumes #{volumes.map(&:id).join(', ')} ")
+
+    raise "no suitable volumes found" if volumes.empty?
+
+    backup_block = proc do
+      volumes.each do |volume|
+        @mongolly_logger.debug("Snapshotting #{volume.id} with tag #{options[:backup_key]}")
+        next if @mongolly_dry_run
+        snapshot = volume.create_snapshot("#{options[:backup_key]} #{Time.now.utc} mongolly #{host}")
+        snapshot.add_tag("created_at", value: Time.now.utc)
+        snapshot.add_tag("backup_key", value: options[:backup_key])
+      end
+    end
+
+    if volumes.length > 1
+      with_database_locked(&backup_block)
+    else
+      backup_block.call
+    end
+  end
+
 end
