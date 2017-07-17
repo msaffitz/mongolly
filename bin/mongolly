@@ -18,7 +18,7 @@ module Mongolly
     method_option :age, aliases: "-a", required: true
     method_option :dry_run, type: :boolean, desc: "Step through command without changes"
     def clean
-      age = Time.parse.utc(options[:age])
+      age = Time.parse(options[:age]).utc
       Shepherd.new({ dry_run: options[:dry_run] }.merge(config)).cleanup(age)
     end
 
