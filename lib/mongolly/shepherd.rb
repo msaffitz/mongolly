@@ -36,7 +36,7 @@ module Mongolly
       @logger.debug "deleting snapshots older than #{age}}"
       ec2.snapshots.with_owner(:self).each do |snapshot|
         next if snapshot.tags[:created_at].nil? || snapshot.tags[:backup_key].nil?
-        if Time.parse.utc(snapshot.tags[:created_at]) < age
+        if Time.parse(snapshot.tags[:created_at]).utc < age
           @logger.debug "deleting snapshot #{snapshot.id} tagged #{snapshot.tags[:backup_key]} created at #{snapshot.tags[:created_at]}, earlier than #{age}"
           snapshot.delete unless @dry_run
         end
