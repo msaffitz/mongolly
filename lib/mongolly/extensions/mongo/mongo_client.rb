@@ -8,6 +8,10 @@ class Mongo::MongoClient
   REPLICA_SNAPSHOT_THRESHOLD = 60 * 5 # 5 Minutes
   REPLICA_SNAPSHOT_PREFER_HIDDEN = true
   DEFAULT_MONGO_PORT = 27017 # rubocop: disable Style/NumericLiterals
+  LOCK_RETRY_WAIT = 30 # seconds
+  LOCK_RETRY_LIMIT = 10 # attempts
+
+  @lock_retries = 0
 
   def snapshot_ebs(options = {})
     @mongolly_dry_run = options[:dry_run] || false
@@ -104,9 +108,28 @@ class Mongo::MongoClient
     yield
   rescue => ex
     @mongolly_logger.error "Error with database locked: #{ex}"
+
+    if @lock_retries < LOCK_RETRY_LIMIT
+      @lock_retries += 1
+
+      @mongolly_logger.debug "Waiting #{LOCK_RETRY_WAIT} seconds..."
+      sleep LOCK_RETRY_WAIT
+
+      if locked?
+        @mongolly_logger.debug "Database locked!"
+        yield
+      else
+        @mongolly_logger.debug "Retrying... (attempt ##{@lock_retries})"
+        retry
+      end
+    else
+      @mongolly_logger.error "Unable to lock database after #{LOCK_RETRY_LIMIT} attempts!"
+    end
   ensure
-    @mongolly_logger.debug "Unlocking database..."
-    unlock! if !@mongolly_dry_run && locked?
+    @mongolly_logger.debug "Unlocking database..." if @mongolly_dry_run || locked?
+    unless @mongolly_dry_run
+      locked? ? unlock! : @mongolly_logger.debug "Skipping unlock! (database is not locked)"
+    end
     enable_profiling
   end
 
