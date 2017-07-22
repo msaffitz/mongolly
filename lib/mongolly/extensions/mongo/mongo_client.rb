@@ -3,8 +3,16 @@ require "logger"
 require "net/ssh"
 require "retries"
 
+class LockFailException < StandardError
+end
+
+class UnlockFailException < StandardError
+end
+
 class Mongo::MongoClient
   MAX_DISABLE_BALANCER_WAIT = 60 * 8 # 8 Minutes
+  MAX_UNLOCK_RETRIES = 3
+  UNLOCK_SLEEP = 10 # 10 Seconds
   REPLICA_SNAPSHOT_THRESHOLD = 60 * 5 # 5 Minutes
   REPLICA_SNAPSHOT_PREFER_HIDDEN = true
   DEFAULT_MONGO_PORT = 27017 # rubocop: disable Style/NumericLiterals
@@ -99,14 +107,18 @@ class Mongo::MongoClient
   def with_database_locked
     @mongolly_logger.debug "Locking database..."
     disable_profiling
-    lock! unless @mongolly_dry_run || locked?
+    # {"info"=>"now locked against writes, use db.fsyncUnlock() to unlock", "seeAlso"=>"http://dochub.mongodb.org/core/fsynccommand", "ok"=>1.0}
+    unless @mongolly_dry_run || locked?
+      response = lock!
+      @mongolly_logger.debug "Lock response: #{response['info']}"
+      raise LockFailException, response["info"] if response["ok"] != 1.0
+    end
     @mongolly_logger.debug "With database locked..."
     yield
   rescue => ex
     @mongolly_logger.error "Error with database locked: #{ex}"
   ensure
-    @mongolly_logger.debug "Unlocking database..."
-    unlock! if !@mongolly_dry_run && locked?
+    strong_unlock!
     enable_profiling
   end
 
@@ -184,12 +196,23 @@ class Mongo::MongoClient
       ssh.loop
     end
 
-    if exit_code != 0
-      raise "Unable to exec #{command} on #{host}, #{output}"
-    end
+    raise "Unable to exec #{command} on #{host}, #{output}" if exit_code != 0
   end
 
   private
+
+  def strong_unlock!
+    @mongolly_logger.debug "Unlocking database..."
+    return if @mongolly_dry_run || !locked?
+    retries ||= 0
+    #  {"info"=>"unlock completed", "ok"=>1.0}
+    response = unlock!
+    raise UnlockFailException, response["info"] if response["ok"] != 1.0 || locked?
+  rescue UnlockFailException => ex
+    @mongolly_logger.warn "Failed to unlock, #{ex}, sleeping #{UNLOCK_SLEEP} on attempt #{retries} of #{MAX_UNLOCK_RETRIES}"
+    sleep UNLOCK_SLEEP
+    retry if (retries += 1) <= MAX_UNLOCK_RETRIES
+  end
 
   def backup_instance(address, options)
     host, port = address.split(":")
