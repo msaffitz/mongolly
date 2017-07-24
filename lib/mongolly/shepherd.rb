@@ -9,6 +9,7 @@ module Mongolly
       @db_username       = options[:db_username]
       @db_password       = options[:db_password]
       @dry_run           = options[:dry_run]
+      @op_timeout        = options[:op_timeout] || "120"
       @logger            = options[:logger] || Logger.new(STDOUT)
       @logger.level = case options[:log_level].strip
                       when "fatal"; then Logger::FATAL
@@ -47,10 +48,10 @@ module Mongolly
     def connection
       db = if @database.is_a? Array
              @logger.debug "connecting to a replica set #{@database}"
-             Mongo::MongoReplicaSetClient.new(@database)
+             Mongo::MongoReplicaSetClient.new(@database, op_timeout: @op_timeout)
            else
              @logger.debug "connecting to a single instance #{@database}"
-             Mongo::MongoClient.new(*@database.split(":"))
+             Mongo::MongoClient.new(*@database.split(":"), op_timeout: @op_timeout)
            end
       if @db_username && @db_password
         db["admin"].authenticate(@db_username, @db_password)

@@ -170,7 +170,7 @@ class Mongo::MongoClient
   end
 
   def replica_set_connection(hosts, options)
-    db = Mongo::MongoReplicaSetClient.new(hosts)
+    db = Mongo::MongoReplicaSetClient.new(hosts, op_timeout: @op_timeout)
     db["admin"].authenticate(options[:db_username], options[:db_password]) if options[:db_username]
     db
   end
