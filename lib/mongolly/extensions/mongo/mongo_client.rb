@@ -105,8 +105,8 @@ class Mongo::MongoClient
   end
 
   def with_database_locked
-    @mongolly_logger.debug "Locking database..."
     disable_profiling
+    @mongolly_logger.debug "Locking database..."
     # {"info"=>"now locked against writes, use db.fsyncUnlock() to unlock", "seeAlso"=>"http://dochub.mongodb.org/core/fsynccommand", "ok"=>1.0}
     unless @mongolly_dry_run || locked?
       response = lock!
@@ -207,6 +207,7 @@ class Mongo::MongoClient
     retries ||= 0
     #  {"info"=>"unlock completed", "ok"=>1.0}
     response = unlock!
+    @mongolly_logger.debug "Unlock response: #{response['info']}"
     raise UnlockFailException, response["info"] if response["ok"] != 1.0 || locked?
   rescue UnlockFailException => ex
     @mongolly_logger.warn "Failed to unlock, #{ex}, sleeping #{UNLOCK_SLEEP} on attempt #{retries} of #{MAX_UNLOCK_RETRIES}"
