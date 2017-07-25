@@ -9,6 +9,9 @@ end
 class UnlockFailException < StandardError
 end
 
+class UnxpectedUnlockException < StandardError
+end
+
 class Mongo::MongoClient
   MAX_DISABLE_BALANCER_WAIT = 60 * 8 # 8 Minutes
   MAX_UNLOCK_RETRIES = 3
@@ -201,9 +204,14 @@ class Mongo::MongoClient
 
   private
 
-  def strong_unlock!
+  def strong_unlock!(aggressive: false)
     @mongolly_logger.debug "Unlocking database..."
-    return if @mongolly_dry_run || !locked?
+    return if @mongolly_dry_run
+    if !locked?
+      return if !aggressive
+      raise UnxpectedUnlockException
+    end
+    return if !locked? && !aggressive
     retries ||= 0
     #  {"info"=>"unlock completed", "ok"=>1.0}
     response = unlock!
@@ -223,7 +231,7 @@ class Mongo::MongoClient
     # This prevents a subclassed replica set from still acting against the
     # primary
     if options[:strict_connection] && (self.host != host || self.port.to_i != port.to_i)
-      return Mongo::MongoClient.new(host, port.to_i, slave_ok: true).snapshot_ebs(options)
+      return Mongo::MongoClient.new(host, port.to_i, slave_ok: true, op_timeout: @op_timeout).snapshot_ebs(options)
     end
 
     instance = @ec2.instances.find_from_address(host, port)
