@@ -61,7 +61,7 @@ class Mongo::MongoClient
     retry_logger = proc do |_, attempt_number, total_delay|
       @mongolly_logger.debug "Error enabling balancing (config server not up?); retry attempt #{attempt_number}; #{total_delay} seconds have passed."
     end
-    with_retries(max_tries: 5, handler: retry_logger, rescue: Mongo::OperationFailure, base_sleep_seconds: 5, max_sleep_seconds: 120) do
+    with_retries(max_tries: 5, handler: retry_logger, rescue: [Mongo::OperationFailure, Mongo::ConnectionFailure], base_sleep_seconds: 5, max_sleep_seconds: 120) do
       self["config"].collection("settings").update({ _id: "balancer" }, { "$set" => { stopped: false } }, upsert: true) unless @mongolly_dry_run
     end
   end
