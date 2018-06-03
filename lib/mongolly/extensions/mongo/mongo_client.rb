@@ -82,8 +82,6 @@ class Mongo::MongoClient
     # Stop Config Server
     ssh_command(options[:config_server_ssh_user], config_server, options[:mongo_stop_command], options[:config_server_ssh_keypath])
     yield
-  rescue => ex
-    @mongolly_logger.error "Error with config server stopped: #{ex}"
   ensure
     # Start Config Server
     ssh_command(options[:config_server_ssh_user], config_server, options[:mongo_start_command], options[:config_server_ssh_keypath])
@@ -101,8 +99,6 @@ class Mongo::MongoClient
     end
     @mongolly_logger.debug "With shard balancing disabled..."
     yield
-  rescue => ex
-    @mongolly_logger.error "Error with disabled balancer: #{ex}"
   ensure
     enable_balancing
   end
@@ -118,8 +114,6 @@ class Mongo::MongoClient
     end
     @mongolly_logger.debug "With database locked..."
     yield
-  rescue => ex
-    @mongolly_logger.error "Error with database locked: #{ex}"
   ensure
     strong_unlock!
     enable_profiling
@@ -220,7 +214,11 @@ class Mongo::MongoClient
   rescue UnlockFailException => ex
     @mongolly_logger.warn "Failed to unlock, #{ex}, sleeping #{UNLOCK_SLEEP} on attempt #{retries} of #{MAX_UNLOCK_RETRIES}"
     sleep UNLOCK_SLEEP
-    retry if (retries += 1) <= MAX_UNLOCK_RETRIES
+    if (retries += 1) <= MAX_UNLOCK_RETRIES
+      retry
+    else
+      raise ex
+    end
   end
 
   def backup_instance(address, options)
