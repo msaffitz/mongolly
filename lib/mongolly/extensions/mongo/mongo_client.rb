@@ -207,8 +207,8 @@ class Mongo::MongoClient
   def strong_unlock!(aggressive: false)
     @mongolly_logger.debug "Unlocking database..."
     return if @mongolly_dry_run
-    if !locked?
-      return if !aggressive
+    unless locked?
+      return unless aggressive
       raise UnxpectedUnlockException
     end
     return if !locked? && !aggressive
