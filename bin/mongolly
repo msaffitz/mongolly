@@ -6,6 +6,10 @@ require "mongolly"
 
 module Mongolly
   class Runner < Thor
+    def self.exit_on_failure?
+      true
+    end
+
     class_option :config, type: :string, aliases: "-c", default: "~/.mongolly", desc: "Path to config file"
 
     desc "backup", "Snapshots the Database EBS Volumes"
