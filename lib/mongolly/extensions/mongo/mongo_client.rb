@@ -88,7 +88,7 @@ class Mongo::MongoClient
   end
 
   def with_disabled_balancing
-    balancer_enabled = self["config"].collection("settings").find(_id: "balancer")["stopped"]
+    balancer_enabled = self["config"].collection("settings").find_one(_id: "balancer")["stopped"]
 
     disable_balancing if balancer_enabled
     term_time = Time.now.utc + MAX_DISABLE_BALANCER_WAIT
