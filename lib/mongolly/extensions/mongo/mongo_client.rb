@@ -88,9 +88,9 @@ class Mongo::MongoClient
   end
 
   def with_disabled_balancing
-    balancer_enabled = self["config"].collection("settings").find_one(_id: "balancer")["stopped"]
+    balancer_disabled = self["config"].collection("settings").find_one(_id: "balancer")["stopped"]
 
-    disable_balancing if balancer_enabled
+    disable_balancing unless balancer_disabled
     term_time = Time.now.utc + MAX_DISABLE_BALANCER_WAIT
     while !@mongolly_dry_run && (Time.now.utc < term_time) && balancer_active?
       @mongolly_logger.info "Balancer active, sleeping for 10s (#{(term_time - Time.now.utc).round}s remaining)"
@@ -102,7 +102,7 @@ class Mongo::MongoClient
     @mongolly_logger.debug "With shard balancing disabled..."
     yield
   ensure
-    enable_balancing if balancer_enabled
+    enable_balancing unless balancer_disabled
   end
 
   def with_database_locked
